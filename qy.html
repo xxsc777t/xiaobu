@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Title</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            overflow: hidden;
+            background-color: #f5f5f5;
+            font-family: Arial, sans-serif;
+        }
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: none;
+        }
+        
+        /* 蓝色转圈样式 */
+        .blue-spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            border-top-color: #1e90ff;
+            border-left-color: #1e90ff;
+            border-bottom-color: white;
+            border-right-color: white;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* 加载容器 */
+        .loader-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: #f5f5f5;
+        }
+        .loading-text {
+            margin-top: 20px;
+            color: #333;
+            font-size: 16px;
+        }
+        
+        /* 错误信息 */
+        .error-container {
+            position: fixed;
+            top: 30%;
+            left: 0;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: center;
+            text-align: center;
+            transform: translateY(-50%);
+        }
+        .access-denied {
+            font-size: 24px;
+            font-weight: bold;
+            color: #000;
+            margin-bottom: 10px;
+        }
+        .whitelist-error {
+            font-size: 16px;
+            color: #666;
+            margin-bottom: 20px;
+        }
+        .contact-info {
+            font-size: 16px;
+            color: #ff0000;
+            font-weight: bold;
+        }
+        
+        /* 联系方式容器 */
+        .contact-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .contact-box {
+            background-color: white;
+            padding: 30px 50px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <iframe id="embeddedPage" src=""></iframe>
+    
+    <!-- 加载转圈 -->
+    <div id="loader" class="loader-container">
+        <div class="blue-spinner"></div>
+        <div class="loading-text">加载中...</div>
+    </div>
+    
+    <!-- 错误信息 -->
+    <div id="errorContainer" class="error-container" style="display: none;">
+        <div class="access-denied">访问受限</div>
+        <div class="whitelist-error">无法获取远程白名单且本地白名单无匹配</div>
+        <div class="contact-info">小布TG@XiaoBuZL</div>
+    </div>
+    
+    <!-- 联系方式（仅无y参数时显示） -->
+    <div id="contactContainer" class="contact-container" style="display: none;">
+        <div class="contact-box">
+            <div class="contact-info">小布TG@XiaoBuZL</div>
+        </div>
+    </div>
+
+    <script>
+        // 配置
+        const CONFIG = {
+            WHITELIST_API: 'https://9986.siphot.org/jk.php',
+            FALLBACK_WHITELIST: [
+            
+            ],
+            WHITELIST_CACHE_TIME: 300000
+        };
+
+        let currentWhitelist = CONFIG.FALLBACK_WHITELIST;
+        let lastUpdateTime = 0;
+
+        // 显示状态切换函数
+        function showState(state) {
+            // 隐藏所有元素
+            document.getElementById('loader').style.display = 'none';
+            document.getElementById('errorContainer').style.display = 'none';
+            document.getElementById('contactContainer').style.display = 'none';
+            document.getElementById('embeddedPage').style.display = 'none';
+            
+            // 显示指定状态
+            switch(state) {
+                case 'loading':
+                    document.getElementById('loader').style.display = 'flex';
+                    document.title = 'Title';
+                    break;
+                case 'error':
+                    document.getElementById('errorContainer').style.display = 'flex';
+                    document.title = '访问受限';
+                    break;
+                case 'contact':
+                    document.getElementById('contactContainer').style.display = 'flex';
+                    document.title = '小布TG@XiaoBuZL';
+                    break;
+                case 'success':
+                    document.getElementById('embeddedPage').style.display = 'block';
+                    document.title = '在线客服';
+                    break;
+            }
+        }
+
+        // 获取白名单
+        async function fetchWhitelist() {
+            showState('loading');
+            
+            if (Date.now() - lastUpdateTime < CONFIG.WHITELIST_CACHE_TIME) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${CONFIG.WHITELIST_API}?t=${Date.now()}`);
+                if (!response.ok) throw new Error('API请求失败');
+                
+                const data = await response.json();
+                
+                let domains = [];
+                if (data.status === 'success' && data.domains) {
+                    domains = data.domains;
+                } else if (Array.isArray(data)) {
+                    domains = data;
+                }
+                
+                currentWhitelist = domains.map(d => 
+                    d.toString()
+                     .replace(/^https?:\/\//, '')
+                     .replace('www.', '')
+                     .split('/')[0]
+                     .toLowerCase()
+                ).filter(d => d.length > 0);
+                
+                lastUpdateTime = Date.now();
+            } catch (error) {
+                if (currentWhitelist.length === 0) {
+                    currentWhitelist = CONFIG.FALLBACK_WHITELIST.map(d => 
+                        d.replace(/^https?:\/\//, '')
+                         .replace('www.', '')
+                         .toLowerCase()
+                    );
+                }
+            }
+        }
+
+        function getQueryParam(param) {
+            return new URLSearchParams(window.location.search).get(param);
+        }
+        
+        function decodeBase64Url(encodedUrl) {
+            return decodeURIComponent(atob(encodedUrl.replace(/-/g, '+').replace(/_/g, '/')));
+        }
+        
+        function extractDomain(url) {
+            try {
+                let domain = new URL(url).hostname;
+                return domain.replace('www.', '').toLowerCase();
+            } catch (e) {
+                return null;
+            }
+        }
+        
+        function isDomainAllowed(url) {
+            const domain = extractDomain(url);
+            if (!domain) return false;
+            
+            return currentWhitelist.some(d => {
+                return domain === d || 
+                      (domain.endsWith(`.${d}`) && 
+                      domain.split('.').length - d.split('.').length === 1);
+            });
+        }
+
+        async function main() {
+            const encodedUrl = getQueryParam('y');
+            
+            if (!encodedUrl) {
+                showState('contact');
+                return;
+            }
+
+            try {
+                const decodedUrl = decodeBase64Url(encodedUrl);
+                await fetchWhitelist();
+                
+                if (!isDomainAllowed(decodedUrl)) {
+                    throw new Error('Domain not allowed');
+                }
+                
+                showState('success');
+                document.getElementById('embeddedPage').src = decodedUrl;
+                
+            } catch (error) {
+                showState('error');
+            }
+        }
+
+        main();
+    </script>
+</body>
+</html>
